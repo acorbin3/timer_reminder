@@ -37,21 +37,25 @@ flutter analyze                # Run static analysis
 ### Project Structure
 ```
 lib/
-├── main.dart                  # App entry point, provider setup
+├── main.dart                  # App entry point, provider setup, alarm polling
 ├── models/                    # Data models
 │   ├── reminder.dart          # Reminder model with quiet hours support
 │   ├── reminder_type.dart     # Reminder categories and types
-│   └── medication_log.dart    # Log entries for tracking
+│   ├── medication_log.dart    # Log entries for tracking
+│   └── app_settings.dart      # App-wide settings
 ├── services/                  # Business logic services
 │   ├── database_service.dart  # SQLite database operations
 │   ├── notification_service.dart # Notification scheduling
-│   └── reminder_service.dart  # Reminder logic and background tasks
+│   ├── reminder_service.dart  # Reminder logic and background tasks
+│   └── alarm_sound_service.dart # Alarm sound playback
 ├── providers/                 # State management
 │   └── reminder_provider.dart # App-wide state with ChangeNotifier
 ├── screens/                   # UI screens
 │   ├── dashboard_screen.dart  # Main dashboard
+│   ├── alarm_screen.dart      # Full-screen alarm with actions
 │   ├── reminder_form_screen.dart # Add/edit reminders
-│   └── history_screen.dart    # View all medication logs
+│   ├── history_screen.dart    # View all medication logs
+│   └── settings_screen.dart   # App settings
 └── widgets/                   # Reusable components
 ```
 
@@ -62,6 +66,7 @@ lib/
 - **workmanager**: ^0.9.0 (Background tasks)
 - **intl**: ^0.19.0 (Date/time formatting)
 - **timezone**: ^0.9.2 (Timezone support)
+- **audioplayers**: ^6.1.0 (Alarm sound playback)
 
 ### Data Models
 
@@ -90,7 +95,8 @@ lib/
 - Foreign key constraints for data integrity
 
 **NotificationService**: Handle all notification operations
-- Schedule recurring notifications
+- Schedule recurring notifications via `scheduleReminder()`
+- Show immediate notifications via `showImmediateNotification()` (for foreground alarms)
 - Custom notification channels per reminder type
 - Actions: mark taken, skip, snooze (5/10/15 min)
 - Quiet hours support
@@ -100,6 +106,12 @@ lib/
 - Check and schedule reminders every 15 minutes
 - Handle notification actions
 - Water reminder behavior logic
+- `markAwaitingAcknowledgment()` / `clearAwaitingAcknowledgment()` for alarm state
+- `clearAllAwaitingAcknowledgments()` for manual reset via pull-to-refresh
+
+**AlarmSoundService**: Alarm audio playback
+- Play/stop alarm sounds using audioplayers package
+- Looping playback until acknowledged
 
 ### State Management
 
@@ -130,6 +142,27 @@ Uses **Provider** pattern with ChangeNotifier:
 
 ## Important Implementation Details
 
+### Alarm System Architecture
+
+The app uses a dual-alert system for maximum reliability:
+
+**In-App Alarm (Foreground)**:
+- 1-second polling timer in `main.dart` checks for due reminders
+- Shows full-screen `AlarmScreen` with sound, actions, and elapsed time
+- Fires immediate notification via `showImmediateNotification()` for notification shade
+- Uses `_shownAlarms` Set and `AlarmScreen._activeAlarmScreens` to prevent duplicates
+
+**OS Notification (Background)**:
+- Scheduled via `zonedSchedule()` for when app is closed
+- Full-screen intent for high-priority alarms
+- Action buttons handled via notification callbacks
+
+**Awaiting Acknowledgment Flag**:
+- Set when alarm fires, prevents re-triggering until user responds
+- Cleared automatically when user takes action (mark taken, skip, snooze)
+- Cleared if alarm screen dismissed without action (allows re-trigger)
+- Can be manually cleared via pull-to-refresh on dashboard
+
 ### Quiet Hours Implementation
 - Custom `QuietTime` class (not Flutter's TimeOfDay) to avoid naming conflicts
 - Handles overnight quiet hours (e.g., 10pm-6am spans midnight)
@@ -145,11 +178,17 @@ Uses **Provider** pattern with ChangeNotifier:
 - Schedules notifications for upcoming reminders
 - Handles quiet hours and end dates
 
-### Notification Actions
-Users can interact with notifications via:
-- **Mark as Taken**: Log the medication and handle water reminder behavior
-- **Skip**: Dismiss without logging
+### Alarm Screen & Notification Actions
+Users can interact via the full-screen alarm or notification:
+- **Mark as Taken**: Log the medication, reset timer based on water behavior
+- **Skip**: Dismiss without logging, schedule next alarm
 - **Snooze**: Delay for 5, 10, or 15 minutes
+
+The alarm screen displays:
+- Elapsed time since alarm was due (chronometer)
+- How long the alarm screen has been open
+- Last medication taken (if tracking enabled)
+- Medication options checkboxes (if configured)
 
 ### History Tracking
 - Optional per-reminder (some reminders don't need history)
