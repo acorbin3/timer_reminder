@@ -465,10 +465,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 subtitle: Text('Every ${_formatInterval(reminder.intervalSeconds)}'),
                 trailing: IconButton(
                   icon: const Icon(Icons.play_arrow),
+                  tooltip: 'Resume',
                   onPressed: () {
                     provider.resumeWaterReminder(reminder.id!);
                   },
                 ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ReminderFormScreen(reminder: reminder),
+                    ),
+                  );
+                },
               );
             }),
           ],
